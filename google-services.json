@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "130661171711",
+    "firebase_url": "https://husntubee1-default-rtdb.firebaseio.com",
+    "project_id": "husntubee1",
+    "storage_bucket": "husntubee1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:130661171711:android:707ace802725904caca7ca",
+        "android_client_info": {
+          "package_name": "husntube.app.com"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDXIE8b3Hp2UwCJ49smxpdHGD3NgwQcsM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

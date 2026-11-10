@@ -1,0 +1,616 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function notAnon() { return signedIn() && request.auth.token.firebase.sign_in_provider != "anonymous"; }
+    function role() {
+      return exists(/databases/$(database)/documents/roles/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role : "";
+    }
+    function isStaff() { return signedIn() && role() in ["owner", "sup"]; }
+    function roomOwnerId(rid) { return get(/databases/$(database)/documents/rooms/$(rid)).data.owner; }
+    function partnerBlocked(rid, u) { return u == get(/databases/$(database)/documents/rooms/$(rid)).data.get("partner", "-") && request.auth.uid != roomOwnerId(rid) && request.auth.uid != u; }
+    function ownerSeatBlocked(rid) { return resource != null && resource.data.uid != null && resource.data.uid == roomOwnerId(rid) && request.auth.uid != resource.data.uid; }
+    function roomStaffOf(rid) {
+      return signedIn() && (get(/databases/$(database)/documents/rooms/$(rid)).data.owner == request.auth.uid
+        || get(/databases/$(database)/documents/rooms/$(rid)).data.get("mods", []).hasAny([request.auth.uid]));
+    }
+    function isOwner() { return signedIn() && role() == "owner"; }
+    function okUser() {
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        || !(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("status", "active") in ["banned", "restricted"]);
+    }
+
+    function spinAmt(u) {
+      let seg = get(/databases/$(database)/documents/config/wheel).data.seg;
+      let sp = get(/databases/$(database)/documents/spins/$(u)).data;
+      return seg[sp.t.toMillis() % seg.size()];
+    }
+
+    function walletOpen(u) {
+      return !exists(/databases/$(database)/documents/wallet/$(u))
+        || (get(/databases/$(database)/documents/wallet/$(u)).data.get("frozen", false) != true
+            && get(/databases/$(database)/documents/wallet/$(u)).data.get("lockUntil", 0) < request.time.toMillis());
+    }
+
+    match /roles/{id} {
+      allow read: if signedIn() && (request.auth.uid == id || isOwner());
+      allow write: if isOwner();
+    }
+    match /config/{doc} {
+      allow read: if doc == "sup";
+      allow write: if doc == "sup" && isOwner();
+    }
+    match /friends/{pid} {
+      allow read: if signedIn() && request.auth.uid in resource.data.users;
+      allow create: if notAnon() && okUser() && request.resource.data.status == "accepted"
+        && request.resource.data.users.size() == 2 && request.resource.data.users[0] == request.auth.uid
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.get("bot", "") == request.resource.data.users[1]
+        && exists(/databases/$(database)/documents/bots/$(request.resource.data.users[1]))
+        && pid == request.resource.data.users[0] + "_" + request.resource.data.users[1];
+      allow create: if notAnon() && okUser() && request.auth.uid in request.resource.data.users
+        && request.resource.data.users.size() == 2 && request.resource.data.from == request.auth.uid
+        && request.resource.data.status == "pending"
+        && pid == request.resource.data.users[0] + "_" + request.resource.data.users[1];
+      allow update: if signedIn() && request.auth.uid in resource.data.users
+        && resource.data.from != request.auth.uid && request.resource.data.status == "accepted"
+        && request.resource.data.users == resource.data.users;
+      allow delete: if signedIn() && request.auth.uid in resource.data.users;
+    }
+    match /dm/{pid}/msgs/{m} {
+      allow create: if notAnon() && okUser() && request.resource.data.text.size() <= 1000
+        && request.auth.uid in get(/databases/$(database)/documents/friends/$(pid)).data.users
+        && get(/databases/$(database)/documents/friends/$(pid)).data.status == "accepted"
+        && request.resource.data.uid == get(/databases/$(database)/documents/friends/$(pid)).data.get("bot", "-");
+      allow update: if signedIn() && okUser() && request.auth.uid in get(/databases/$(database)/documents/friends/$(pid)).data.users && (
+        (resource.data.uid == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["text", "ed"]))
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lk"]));
+      allow read: if signedIn() && request.auth.uid in get(/databases/$(database)/documents/friends/$(pid)).data.users
+        && get(/databases/$(database)/documents/friends/$(pid)).data.status == "accepted";
+      allow create: if signedIn() && okUser() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text.size() <= 500
+        && request.auth.uid in get(/databases/$(database)/documents/friends/$(pid)).data.users
+        && get(/databases/$(database)/documents/friends/$(pid)).data.status == "accepted";
+      allow update: if notAnon() && request.auth.uid in get(/databases/$(database)/documents/friends/$(pid)).data.users && (
+        (resource.data.uid == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["text", "edited"]) && request.resource.data.text.size() <= 500)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rx"]) && request.resource.data.rx.diff(resource.data.get("rx", {})).affectedKeys().hasOnly([request.auth.uid])));
+      allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isStaff());
+    }
+    match /videos/{id} {
+      allow read: if true;
+      allow create: if isStaff() || (notAnon() && okUser() && request.resource.data.uid == request.auth.uid);
+      allow update: if isStaff()
+        || (signedIn() && resource.data.get("uid", "x") == request.auth.uid
+            && request.resource.data.get("uid", "x") == resource.data.get("uid", "x")
+            && request.resource.data.get("ct", 0) == resource.data.get("ct", 0))
+        || (signedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["views", "likes", "cmc"])
+            && (request.resource.data.get("views", 0) - resource.data.get("views", 0)) in [0, 1]
+            && (request.resource.data.get("likes", 0) - resource.data.get("likes", 0)) in [-1, 0, 1]
+            && (request.resource.data.get("cmc", 0) - resource.data.get("cmc", 0)) in [-1, 0, 1]);
+      allow delete: if isStaff() || (signedIn() && resource.data.get("uid", "x") == request.auth.uid);
+      match /comments/{c} {
+        allow read: if true;
+        allow create: if signedIn() && okUser() && request.resource.data.uid == request.auth.uid
+          && request.resource.data.text.size() <= 500;
+        allow delete: if isStaff() || (signedIn() && resource.data.uid == request.auth.uid);
+      }
+    }
+    match /reels/{id} {
+      allow read: if true;
+      allow create: if isStaff() || (notAnon() && okUser() && request.resource.data.uid == request.auth.uid);
+      allow update: if isStaff()
+        || (signedIn() && resource.data.get("uid", "x") == request.auth.uid
+            && request.resource.data.get("uid", "x") == resource.data.get("uid", "x")
+            && request.resource.data.get("ct", 0) == resource.data.get("ct", 0))
+        || (signedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["views", "likes", "cmc"])
+            && (request.resource.data.get("views", 0) - resource.data.get("views", 0)) in [0, 1]
+            && (request.resource.data.get("likes", 0) - resource.data.get("likes", 0)) in [-1, 0, 1]
+            && (request.resource.data.get("cmc", 0) - resource.data.get("cmc", 0)) in [-1, 0, 1]);
+      allow delete: if isStaff() || (signedIn() && resource.data.get("uid", "x") == request.auth.uid);
+      match /comments/{c} {
+        allow read: if true;
+        allow create: if signedIn() && okUser() && request.resource.data.uid == request.auth.uid
+          && request.resource.data.text.size() <= 500;
+        allow delete: if isStaff() || (signedIn() && resource.data.uid == request.auth.uid);
+      }
+    }
+    match /savedpl/{id} {
+      allow read: if true;
+      allow create: if notAnon() && okUser()
+        && request.resource.data.keys().hasOnly(["title", "poster", "ch", "n", "eps", "t", "by", "yt"])
+        && request.resource.data.title is string && request.resource.data.title.size() <= 200
+        && request.resource.data.eps is list && request.resource.data.eps.size() <= 300
+        && request.resource.data.by == request.auth.uid && request.resource.data.t is number
+        && request.resource.data.poster.matches("https://i\\.ytimg\\.com/.*");
+      allow delete: if isStaff() || (signedIn() && resource.data.by == request.auth.uid);
+    }
+    match /smartmovies/{id} {
+      allow read: if true;
+      allow create: if notAnon() && okUser()
+        && request.resource.data.keys().hasOnly(["title", "orig", "desc", "poster", "back", "mt", "tmdb", "yr", "rate", "keywords", "yt", "t", "ch", "n", "eps"])
+        && request.resource.data.title is string && request.resource.data.title.size() <= 200
+        && request.resource.data.keywords is list && request.resource.data.keywords.size() <= 16
+        && ((request.resource.data.get("mt", "") == "ytp" && request.resource.data.poster.matches("https://i\\.ytimg\\.com/.*") && request.resource.data.yt is string
+             && request.resource.data.yt.matches("[A-Za-z0-9_-]{6,20}") && request.resource.data.get("eps", []).size() <= 300)
+            || (request.resource.data.poster.matches("https://image\\.tmdb\\.org/.*") && request.resource.data.get("yt", "") == "")
+            || (request.resource.data.get("mt", "") == "yt" && request.resource.data.poster.matches("https://i\\.ytimg\\.com/.*")
+                && request.resource.data.yt is string && request.resource.data.yt.matches("[A-Za-z0-9_-]{6,20}")));
+      allow update: if isStaff()
+        || (signedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["yt"])
+            && resource.data.get("yt", "") == "" && request.resource.data.yt is string && request.resource.data.yt.size() <= 20);
+      allow delete: if isStaff();
+      match /comments/{c} {
+        allow read: if true;
+        allow create: if signedIn() && okUser() && request.resource.data.uid == request.auth.uid
+          && request.resource.data.text.size() <= 500;
+        allow delete: if isStaff() || (signedIn() && resource.data.uid == request.auth.uid);
+      }
+    }
+    match /vcounts/{id} {
+      allow read: if true;
+      allow create: if signedIn() && okUser()
+        && request.resource.data.keys().hasOnly(["views", "likes", "cmc", "t"])
+        && request.resource.data.get("views", 0) in [0, 1]
+        && request.resource.data.get("likes", 0) in [-1, 0, 1]
+        && request.resource.data.get("cmc", 0) in [-1, 0, 1];
+      allow update: if signedIn() && okUser()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["views", "likes", "cmc", "t"])
+        && (request.resource.data.get("views", 0) - resource.data.get("views", 0)) in [0, 1]
+        && (request.resource.data.get("likes", 0) - resource.data.get("likes", 0)) in [-1, 0, 1]
+        && (request.resource.data.get("cmc", 0) - resource.data.get("cmc", 0)) in [-1, 0, 1];
+      allow delete: if isStaff();
+    }
+    match /lists/{id} { allow read: if true; allow write: if isStaff(); }
+    match /products/{id} { allow read: if true; allow write: if isStaff(); }
+    match /books/{id} { allow read: if true; allow write: if isStaff(); }
+    match /apps/{id} { allow read: if true; allow write: if isStaff(); }
+    match /cats/{id} { allow read: if true; allow write: if isStaff(); }
+    match /notices/{id} { allow read: if true; allow write: if isStaff(); }
+    match /blobs/{id} { allow read: if true; allow write: if isStaff(); }
+
+    match /presence/{u} {
+      allow create, update: if notAnon() && request.auth.uid == u && request.resource.data.keys().hasOnly(["t"]);
+      allow read, delete: if false;
+    }
+    match /fcm/{u} {
+      allow create, update: if notAnon() && request.auth.uid == u && request.resource.data.keys().hasOnly(["tok","t","p"]);
+      allow delete: if notAnon() && request.auth.uid == u;
+      allow read: if false;
+    }
+    match /tglink/{c} {
+      allow create: if notAnon() && c.size() >= 16 && request.resource.data.keys().hasOnly(["uid","t"])
+        && request.resource.data.uid == request.auth.uid && request.resource.data.t is number;
+      allow read, update, delete: if false;
+    }
+    match /tg/{u} {
+      allow read, delete: if notAnon() && request.auth.uid == u;
+      allow create, update: if false;
+    }
+    match /people/{pid} {
+      allow read: if notAnon();
+      allow create: if (notAnon() && request.auth.uid == pid
+        && request.resource.data.keys().hasOnly(["name", "photo", "t", "hid", "cover"])
+        && request.resource.data.get("cover", "").size() <= 400000
+        && request.resource.data.name.size() <= 40) || isStaff();
+      allow update: if (notAnon() && request.auth.uid == pid
+        && request.resource.data.keys().hasOnly(["name", "photo", "t", "hid", "verified", "cover"])
+        && request.resource.data.get("cover", "").size() <= 400000
+        && request.resource.data.get("verified", false) == resource.data.get("verified", false)
+        && request.resource.data.name.size() <= 40) || isStaff();
+      allow delete: if isStaff() || (signedIn() && request.auth.uid == pid);
+    }
+    match /vblobs/{bid} {
+      allow read: if true;
+      allow create: if notAnon() && okUser() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isStaff() || (signedIn() && resource.data.uid == request.auth.uid)
+        || (resource.data.get("exp", 0) > 0 && request.time.toMillis() > resource.data.exp);
+    }
+    match /shelves/{id} { allow read: if true; allow write: if isStaff(); }
+    match /resetReq/{rid} {
+      allow create: if signedIn() && request.resource.data.keys().hasOnly(["email", "t", "uid"]);
+      allow read, delete: if isStaff();
+    }
+    match /calls/{cid} {
+      allow read: if signedIn() && (request.auth.uid == resource.data.from || request.auth.uid == resource.data.to);
+      allow create: if notAnon() && okUser() && request.resource.data.from == request.auth.uid && request.resource.data.status == "ringing"
+        && request.auth.uid in get(/databases/$(database)/documents/friends/$(request.resource.data.pid)).data.users
+        && request.resource.data.to in get(/databases/$(database)/documents/friends/$(request.resource.data.pid)).data.users
+        && get(/databases/$(database)/documents/friends/$(request.resource.data.pid)).data.status == "accepted";
+      allow update: if signedIn() && (request.auth.uid == resource.data.from || request.auth.uid == resource.data.to)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "answer"]);
+      allow delete: if signedIn() && (request.auth.uid == resource.data.from || request.auth.uid == resource.data.to);
+      match /ice/{iid} {
+        allow read, create: if signedIn() && (request.auth.uid == get(/databases/$(database)/documents/calls/$(cid)).data.from
+          || request.auth.uid == get(/databases/$(database)/documents/calls/$(cid)).data.to);
+      }
+    }
+    match /groups/{g} {
+      allow read: if notAnon() && (request.auth.uid in resource.data.members || isStaff());
+      allow create: if notAnon() && okUser() && request.resource.data.owner == request.auth.uid
+        && request.auth.uid in request.resource.data.members && request.resource.data.status == "active"
+        && request.resource.data.name.size() <= 60;
+      allow update: if notAnon() && okUser() && (isStaff() || (
+        (request.resource.data.status == resource.data.status || (request.resource.data.status == "gone" && resource.data.status == "active"))
+        && (resource.data.owner == request.auth.uid
+          || (request.auth.uid in resource.data.admins && request.resource.data.owner == resource.data.owner && request.resource.data.admins == resource.data.admins)
+          || (request.auth.uid in resource.data.members && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["members", "admins"])
+              && !(request.auth.uid in request.resource.data.members) && request.resource.data.members.size() == resource.data.members.size() - 1))));
+      allow delete: if isStaff();
+      match /msgs/{m} {
+        allow read: if notAnon() && (request.auth.uid in get(/databases/$(database)/documents/groups/$(g)).data.members || isStaff());
+        allow create: if notAnon() && okUser() && request.resource.data.uid == request.auth.uid
+          && request.auth.uid in get(/databases/$(database)/documents/groups/$(g)).data.members
+          && get(/databases/$(database)/documents/groups/$(g)).data.status == "active"
+          && request.resource.data.text.size() <= 500;
+        allow update: if notAnon() && (
+          (resource.data.uid == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["text", "edited"]) && request.resource.data.text.size() <= 500)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rx"]) && request.resource.data.rx.diff(resource.data.get("rx", {})).affectedKeys().hasOnly([request.auth.uid])));
+        allow delete: if notAnon() && (resource.data.uid == request.auth.uid || isStaff()
+          || request.auth.uid == get(/databases/$(database)/documents/groups/$(g)).data.owner
+          || request.auth.uid in get(/databases/$(database)/documents/groups/$(g)).data.admins);
+      }
+    }
+    match /stories/{s} {
+      allow read: if notAnon();
+      allow create: if notAnon() && okUser() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.exp <= request.time.toMillis() + 90000000;
+      allow update: if notAnon() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["likes"]);
+      allow delete: if notAnon() && (resource.data.uid == request.auth.uid || isStaff() || request.time.toMillis() > resource.data.exp);
+      match /vw/{v} {
+        allow create, update: if notAnon() && v == request.auth.uid;
+        allow read: if notAnon() && (v == request.auth.uid || request.auth.uid == get(/databases/$(database)/documents/stories/$(s)).data.uid || isStaff());
+        allow delete: if notAnon() && (request.auth.uid == get(/databases/$(database)/documents/stories/$(s)).data.uid || isStaff()
+          || request.time.toMillis() > get(/databases/$(database)/documents/stories/$(s)).data.exp);
+      }
+      match /cm/{c} {
+        allow read: if notAnon();
+        allow create: if notAnon() && okUser() && request.resource.data.uid == request.auth.uid && request.resource.data.text.size() <= 300;
+        allow delete: if notAnon() && (resource.data.uid == request.auth.uid || isStaff()
+          || request.time.toMillis() > get(/databases/$(database)/documents/stories/$(s)).data.exp);
+      }
+    }
+    match /config/tpl {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /config/quota {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /quotas/{u} {
+      allow read: if signedIn() && request.auth.uid == u;
+      allow create: if signedIn() && request.auth.uid == u
+        && request.resource.data.keys().hasOnly(["s", "call", "vid", "msg", "vn", "rn"]);
+      allow update: if signedIn() && request.auth.uid == u
+        && request.resource.data.keys().hasOnly(["s", "call", "vid", "msg", "vn", "rn"])
+        && request.resource.data.get("rn", 0) <= (exists(/databases/$(database)/documents/wallet/$(u)) ? get(/databases/$(database)/documents/wallet/$(u)).data.get("qrn", 0) : 0)
+        && (request.resource.data.s - resource.data.s >= 82800000
+          || request.resource.data.get("rn", 0) > resource.data.get("rn", 0)
+          || (request.resource.data.s == resource.data.s
+            && request.resource.data.call >= resource.data.call && request.resource.data.vid >= resource.data.vid
+            && request.resource.data.msg >= resource.data.msg && request.resource.data.vn >= resource.data.vn));
+    }
+    match /config/roomBg {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /idcards/{u} {
+      allow read: if signedIn();
+      allow create, update: if notAnon() && okUser() && request.auth.uid == u
+        && request.resource.data.keys().hasOnly(["name", "home", "addr", "bio", "p1", "p2", "p3", "t"])
+        && request.resource.data.get("name", "") is string && request.resource.data.get("name", "").size() <= 120
+        && request.resource.data.get("home", "") is string && request.resource.data.get("home", "").size() <= 120
+        && request.resource.data.get("addr", "") is string && request.resource.data.get("addr", "").size() <= 200
+        && request.resource.data.get("bio", "") is string && request.resource.data.get("bio", "").size() <= 500
+        && request.resource.data.get("p1", "").size() <= 170000
+        && request.resource.data.get("p2", "").size() <= 170000
+        && request.resource.data.get("p3", "").size() <= 170000;
+      allow delete: if (signedIn() && request.auth.uid == u) || isStaff();
+    }
+    match /config/roomUI {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /config/games {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /customGames/{id} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /glvc/{d} {
+      allow read: if signedIn();
+      allow create: if notAnon() && okUser() && d.matches(request.auth.uid + "_.*")
+        && request.resource.data.keys().hasOnly(["xp", "t"]) && request.resource.data.xp is number && request.resource.data.xp <= 100;
+      allow update: if notAnon() && okUser() && d.matches(request.auth.uid + "_.*")
+        && request.resource.data.keys().hasOnly(["xp", "t"])
+        && request.resource.data.xp >= resource.data.xp && request.resource.data.xp - resource.data.xp <= 100;
+      allow delete: if isStaff();
+    }
+    match /config/exchange {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /config/locks {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /config/ui {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /config/uiicons {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /config/wheel {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /config/link {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /spins/{u} {
+      allow read: if notAnon() && (request.auth.uid == u || isStaff());
+      allow create: if notAnon() && okUser() && request.auth.uid == u
+        && request.resource.data.keys().hasOnly(["t", "n"])
+        && request.resource.data.t == request.time && request.resource.data.n == 1
+        && get(/databases/$(database)/documents/config/wheel).data.get("on", false) == true;
+      allow update: if notAnon() && okUser() && request.auth.uid == u
+        && request.resource.data.keys().hasOnly(["t", "n"])
+        && request.resource.data.t == request.time
+        && request.resource.data.n == resource.data.n + 1
+        && request.time.toMillis() - resource.data.t.toMillis() >= get(/databases/$(database)/documents/config/wheel).data.get("ms", 93600000)
+        && get(/databases/$(database)/documents/config/wheel).data.get("on", false) == true;
+      allow delete: if isStaff();
+    }
+    match /admsg/{u}/m/{mid} {
+      allow read: if notAnon() && (request.auth.uid == u || isStaff());
+      allow create, delete: if isStaff();
+    }
+    function wNew(f) { return request.resource.data[f].removeAll(resource.data.get(f, [])); }
+    function wBuy(f, c) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(["paid", "free", f])
+        && request.resource.data[f] is list
+        && wNew(f).size() == 1
+        && request.resource.data[f].size() == resource.data.get(f, []).size() + 1
+        && get(/databases/$(database)/documents/$(c)/$(wNew(f)[0])).data.price > 0
+        && (resource.data.paid - request.resource.data.paid) + (resource.data.free - request.resource.data.free) == get(/databases/$(database)/documents/$(c)/$(wNew(f)[0])).data.price;
+    }
+    function wBuyQuota() {
+      let c = get(/databases/$(database)/documents/config/quota).data;
+      let d = (resource.data.paid - request.resource.data.paid) + (resource.data.free - request.resource.data.free);
+      let now = request.time.toMillis();
+      let q = request.resource.data.get("qpu", 0);
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(["paid", "free", "qrn", "qpu"])
+        && request.resource.data.paid >= 0 && request.resource.data.free >= 0
+        && request.resource.data.paid <= resource.data.paid && request.resource.data.free <= resource.data.free
+        && request.resource.data.get("qrn", 0) == resource.data.get("qrn", 0) + 1
+        && ((c.get("price", 0) > 0 && d == c.price && q >= now + 86400000 - 180000 && q <= now + 86400000 + 180000)
+          || (c.get("pw", 0) > 0 && d == c.pw && q >= now + 604800000 - 180000 && q <= now + 604800000 + 180000)
+          || (c.get("pm", 0) > 0 && d == c.pm && q >= now + 2592000000 - 180000 && q <= now + 2592000000 + 180000));
+    }
+    function wBuyLink() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(["paid", "free", "link"])
+        && request.resource.data.link == true && resource.data.get("link", false) != true
+        && get(/databases/$(database)/documents/config/link).data.get("on", false) == true
+        && get(/databases/$(database)/documents/config/link).data.price > 0
+        && (resource.data.paid - request.resource.data.paid) + (resource.data.free - request.resource.data.free) == get(/databases/$(database)/documents/config/link).data.price;
+    }
+    match /wallet/{u} {
+      allow read: if notAnon() && (request.auth.uid == u || isStaff());
+      allow create: if notAnon() && request.auth.uid == u && request.resource.data.free == 100 && request.resource.data.paid == 0;
+      allow update: if isStaff() || (notAnon() && request.auth.uid == u
+        && request.resource.data.paid >= 0 && request.resource.data.free >= 0
+        && request.resource.data.paid <= resource.data.paid && request.resource.data.free <= resource.data.free
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["paid", "free"])
+        && resource.data.get("frozen", false) != true && resource.data.get("lockUntil", 0) < request.time.toMillis());
+      allow update: if notAnon() && request.auth.uid == u
+        && resource.data.get("frozen", false) != true && resource.data.get("lockUntil", 0) < request.time.toMillis()
+        && request.resource.data.free >= 0 && request.resource.data.free <= resource.data.free
+        && request.resource.data.paid >= 0 && request.resource.data.paid <= resource.data.paid
+        && (wBuy("bgs", "roomBgs") || wBuy("anims", "roomAnims") || wBuy("frames", "roomFrames") || wBuy("duals", "roomDuals") || wBuy("fx", "roomFx") || wBuyLink());
+      allow update: if notAnon() && request.auth.uid == u
+        && resource.data.get("frozen", false) != true && resource.data.get("lockUntil", 0) < request.time.toMillis()
+        && wBuyQuota();
+      allow create: if isStaff();
+      allow update: if notAnon() && okUser() && request.auth.uid == u
+        && resource.data.get("frozen", false) != true && resource.data.get("lockUntil", 0) < request.time.toMillis()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["wheel", "spinN"])
+        && request.resource.data.spinN == get(/databases/$(database)/documents/spins/$(u)).data.n
+        && resource.data.get("spinN", 0) < request.resource.data.spinN
+        && request.resource.data.wheel - resource.data.get("wheel", 0) == spinAmt(u);
+      allow delete: if isStaff();
+    }
+    match /orders/{o} {
+      allow read: if notAnon() && (resource.data.uid == request.auth.uid || isStaff());
+      allow create: if notAnon() && request.resource.data.uid == request.auth.uid && request.resource.data.status == "pending" && request.resource.data.coins is number;
+      allow update, delete: if isStaff();
+    }
+    match /coinPacks/{d} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /gifts/{d} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /roomUpgrades/{rid} {
+      allow read: if isStaff() || (notAnon() && resource.data.owner == request.auth.uid);
+      allow create, update: if notAnon() && request.resource.data.owner == request.auth.uid
+        && request.resource.data.status == "pending"
+        && get(/databases/$(database)/documents/rooms/$(rid)).data.owner == request.auth.uid;
+      allow delete: if isStaff();
+    }
+    match /rooms/{rid} {
+      allow read: if true;
+      allow create: if notAnon() && okUser() && request.resource.data.owner == request.auth.uid && request.resource.data.status == "live" && request.resource.data.get("vip", 0) == 0;
+      allow update: if isStaff()
+        || (notAnon() && resource.data.owner == request.auth.uid && request.resource.data.owner == resource.data.owner && request.resource.data.status in ["live", "closed"] && request.resource.data.get("vip", 0) == resource.data.get("vip", 0))
+        || (notAnon() && request.auth.uid in resource.data.get("mods", []) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["settings", "name", "desc", "lock", "cover", "mplay", "pinned", "likeN", "viewN", "followers"]))
+        || (notAnon() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["likeN", "followers", "viewN", "dA", "dB"]))
+        || (notAnon() && okUser() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["ch"])
+            && (resource.data.get("ch", {}).get("st", "") != "active" || (request.resource.data.get("ch", null) != null && request.resource.data.ch.get("id", "") == resource.data.ch.get("id", "")))
+            && ((request.resource.data.get("ch", null) != null && request.resource.data.ch.vs.rid != rid
+                 && get(/databases/$(database)/documents/rooms/$(request.resource.data.ch.vs.rid)).data.owner == request.auth.uid)
+                || (request.resource.data.get("ch", null) == null && resource.data.get("ch", null) != null
+                 && get(/databases/$(database)/documents/rooms/$(resource.data.ch.vs.rid)).data.owner == request.auth.uid)));
+      allow delete: if isStaff();
+      match /games/{gid} {
+        allow read: if true;
+        allow create: if notAnon() && okUser() && request.resource.data.host == request.auth.uid;
+        allow update: if notAnon() && okUser() && (
+          resource.data.host == request.auth.uid
+          || request.auth.uid in resource.data.get("players", [])
+          || resource.data.get("status", "") == "ended"
+          || roomStaffOf(rid) || isStaff()
+          || request.resource.data.diff(resource.data).affectedKeys().hasOnly(["reqs", "names"])
+          || (request.auth.uid in resource.data.get("inv", [])
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["players", "names", "inv"])));
+        allow delete: if notAnon() && (resource.data.host == request.auth.uid || roomStaffOf(rid) || isStaff());
+        match /hands/{u} { allow read, write: if notAnon() && okUser(); }
+        match /picks/{u} { allow read: if notAnon(); allow write: if notAnon() && okUser(); }
+      }
+      match /v/{u} {
+        allow read: if notAnon();
+        allow create, update: if notAnon() && u == request.auth.uid;
+        allow delete: if notAnon() && (u == request.auth.uid || isStaff());
+      }
+      match /invites/{u} {
+        allow read: if notAnon() && (u == request.auth.uid || roomStaffOf(rid));
+        allow create, update: if notAnon() && roomStaffOf(rid);
+        allow delete: if notAnon() && (u == request.auth.uid || roomStaffOf(rid));
+      }
+      match /mics/{i} {
+        allow read: if true;
+        allow create, update: if notAnon()
+          && (resource == null || resource.data.uid == null || resource.data.uid == request.auth.uid || (roomStaffOf(rid) && !ownerSeatBlocked(rid) && !(resource != null && resource.data.uid != null && partnerBlocked(rid, resource.data.uid))))
+          && (request.resource.data.uid == request.auth.uid || request.resource.data.uid == null || (roomStaffOf(rid) && request.resource.data.uid != roomOwnerId(rid)))
+          && (i != "0" || request.resource.data.uid == null || roomStaffOf(rid))
+          && (i != "1" || get(/databases/$(database)/documents/rooms/$(rid)).data.get("settings", {}).get("link", false) != true || request.resource.data.uid == null || request.resource.data.uid == get(/databases/$(database)/documents/rooms/$(rid)).data.get("partner", "-"));
+        allow delete: if notAnon() && (resource.data.uid == request.auth.uid || (roomStaffOf(rid) && !ownerSeatBlocked(rid) && !(resource != null && resource.data.uid != null && partnerBlocked(rid, resource.data.uid))));
+      }
+      match /reqs/{u} {
+        allow read: if true;
+        allow create: if notAnon() && u == request.auth.uid && request.resource.data.uid == request.auth.uid
+          && (get(/databases/$(database)/documents/rooms/$(rid)).data.get("settings", {}).get("allowMic", true) != false || roomStaffOf(rid));
+        allow delete: if notAnon() && (u == request.auth.uid || roomStaffOf(rid));
+      }
+      match /kick/{u} {
+        allow read: if true;
+        allow create, delete: if notAnon() && roomStaffOf(rid) && (u != roomOwnerId(rid) || request.auth.uid == u) && !partnerBlocked(rid, u);
+      }
+      match /mute/{u} {
+        allow read: if true;
+        allow create, delete: if notAnon() && roomStaffOf(rid) && (u != roomOwnerId(rid) || request.auth.uid == u) && !partnerBlocked(rid, u);
+      }
+      match /gifts/{g} {
+        allow read: if true;
+        allow create: if notAnon() && request.resource.data.uid == request.auth.uid && request.resource.data.coins is number && request.resource.data.coins > 0
+          && (get(/databases/$(database)/documents/rooms/$(rid)).data.get("settings", {}).get("gifts", true) != false || roomStaffOf(rid));
+        allow delete: if notAnon() && roomStaffOf(rid);
+      }
+      match /cm/{c} {
+        allow read: if true;
+        allow create: if notAnon() && okUser() && request.resource.data.uid == request.auth.uid && request.resource.data.text.size() <= 300
+          && (get(/databases/$(database)/documents/rooms/$(rid)).data.get("settings", {}).get("comments", true) != false || roomStaffOf(rid))
+          && !exists(/databases/$(database)/documents/rooms/$(rid)/mute/$(request.auth.uid));
+        allow delete: if notAnon() && (resource.data.uid == request.auth.uid || roomStaffOf(rid));
+      }
+    }
+    function glvOk(k) {
+      return request.resource.data.get(k, 0) >= resource.data.get(k, 0)
+        && request.resource.data.get(k, 0) - resource.data.get(k, 0) <= 100;
+    }
+    match /glv/{u} {
+      allow read: if signedIn();
+      allow create: if notAnon() && okUser() && request.auth.uid == u;
+      allow update: if notAnon() && okUser() && request.auth.uid == u
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["domino", "ludo", "trn", "xo", "rps", "dice", "snl", "c4", "g48", "t"])
+        && glvOk("domino") && glvOk("ludo") && glvOk("trn") && glvOk("xo") && glvOk("rps") && glvOk("dice") && glvOk("snl") && glvOk("c4") && glvOk("g48");
+      allow delete: if isStaff();
+    }
+    match /recvgifts/{u}/items/{g} {
+      allow read: if notAnon() && (request.auth.uid == u || isStaff());
+      allow create: if notAnon() && request.resource.data.uid == request.auth.uid && request.resource.data.to == u
+        && request.resource.data.coins is number && request.resource.data.coins > 0;
+    }
+    match /giftBal/{u} {
+      allow read: if notAnon() && (request.auth.uid == u || isStaff());
+      allow create: if notAnon() && request.auth.uid == u && request.resource.data.spent is number && request.resource.data.spent >= 0;
+      allow update: if notAnon() && request.auth.uid == u && request.resource.data.spent is number && request.resource.data.spent > resource.data.spent;
+      allow update, delete: if isStaff();
+    }
+    match /exchanges/{e} {
+      allow read: if notAnon() && (resource.data.uid == request.auth.uid || isStaff());
+      allow create: if notAnon() && request.resource.data.uid == request.auth.uid && request.resource.data.status == "pending"
+        && walletOpen(request.auth.uid) && request.resource.data.amount is number && request.resource.data.amount > 0 && request.resource.data.amount <= 1000000000
+        && request.resource.data.net is number;
+      allow update, delete: if isStaff();
+    }
+    match /roomBgs/{b} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /roomAnims/{b} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /roomFrames/{b} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /roomDuals/{b} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /roomFx/{b} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /presence/{u} {
+      allow read: if notAnon();
+      allow write: if notAnon() && okUser() && request.auth.uid == u
+        && request.resource.data.keys().hasOnly(["on", "t"]) && request.resource.data.t is number;
+    }
+    match /chat/{m} {
+      allow update: if notAnon() && okUser() && (
+        (resource.data.uid == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["text", "ed"]))
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lk"]));
+      allow read: if notAnon();
+      allow create: if notAnon() && okUser() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text.size() <= 500;
+      allow update: if notAnon() && (
+        (resource.data.uid == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["text", "edited"]) && request.resource.data.text.size() <= 500)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["rx"]) && request.resource.data.rx.diff(resource.data.get("rx", {})).affectedKeys().hasOnly([request.auth.uid])));
+      allow delete: if isStaff() || (signedIn() && resource.data.uid == request.auth.uid);
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isStaff());
+      allow create: if signedIn() && request.auth.uid == uid
+        && !("status" in request.resource.data) && !("deleted" in request.resource.data) && !("verified" in request.resource.data);
+      allow update: if signedIn() && (
+        (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["status", "deleted", "verified"]))
+        || isStaff());
+      allow delete: if isOwner();
+    }
+
+    match /bots/{id} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    match /support/{uid} {
+      allow read, write: if signedIn() && (request.auth.uid == uid || isStaff());
+      match /msgs/{m} {
+        allow read: if signedIn() && (request.auth.uid == uid || isStaff());
+        allow create: if signedIn() && ((request.auth.uid == uid && request.resource.data.from == "u") || (request.auth.uid == uid && request.resource.data.from == "a" && request.resource.data.auto == true) || isStaff());
+        allow delete: if isStaff();
+      }
+    }
+  }
+}

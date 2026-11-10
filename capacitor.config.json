@@ -1,0 +1,12 @@
+{
+  "appId": "com.husntube.app",
+  "appName": "HusnTube",
+  "webDir": "www",
+  "server": {
+    "url": "https://husntubee1.web.app",
+    "cleartext": false,
+    "allowNavigation": ["husntubee1.web.app", "husntubee1.firebaseapp.com", "*.googleapis.com", "accounts.google.com", "*.google.com"]
+  },
+  "android": { "allowMixedContent": false },
+  "plugins": { "PushNotifications": { "presentationOptions": [] } }
+}

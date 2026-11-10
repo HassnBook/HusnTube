@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>فتح HusnTube</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#150d2b;color:#fff;font-family:Tahoma,Arial,sans-serif;text-align:center}.c{padding:24px;max-width:380px}.b{display:block;margin:12px auto;padding:14px 26px;border-radius:30px;background:linear-gradient(135deg,#7c5cff,#e040fb);color:#fff;text-decoration:none;font-weight:700}.g{background:rgba(255,255,255,.14)}small{opacity:.7}</style></head>
+<body><div class="c"><h2>HusnTube</h2><p id="m">جارٍ فتح التطبيق…</p><a class="b" id="a" href="/">فتح التطبيق</a><a class="b g" id="w" href="/">فتح في المتصفح</a><small>إذا لم يفتح تلقائياً اضغط الزر.</small></div>
+<script>
+/* اسم حزمة تطبيق الأندرويد (إن كان لديك تطبيق APK مبني على الموقع). اتركه فارغاً لاستخدام التطبيق المثبّت من المتصفح (PWA). مثال: "com.mycompany.husntube" */
+var HU_ANDROID_PKG="";
+(function(){
+var q=new URLSearchParams(location.search),dm=q.get("dm")||"",pkg=q.get("pkg")||HU_ANDROID_PKG||"";
+if(!/^[A-Za-z0-9_-]{0,160}$/.test(dm))dm="";if(!/^[A-Za-z0-9_.]{0,100}$/.test(pkg))pkg="";
+var path="/"+(dm?"?dm="+encodeURIComponent(dm):""),web=location.origin+path;
+document.getElementById("a").href=web;document.getElementById("w").href=web;
+var ua=navigator.userAgent||"",android=/Android/i.test(ua);
+if(android&&pkg){
+  /* تطبيق أندرويد: يوجّه مباشرة إلى التطبيق المثبّت، وإن لم يوجد يفتح المتصفح */
+  var intent="intent://"+location.host+path+"#Intent;scheme=https;package="+pkg+";S.browser_fallback_url="+encodeURIComponent(web)+";end";
+  document.getElementById("a").href=intent;
+  location.replace(intent);
+}else{
+  /* PWA المثبّت على الشاشة: رابط ضمن نطاق التطبيق يفتحه Chrome/Safari داخل التطبيق إن كان مثبّتاً، وإلا يفتح الموقع */
+  setTimeout(function(){location.replace(web)},400);
+}
+})();
+</script></body></html>
