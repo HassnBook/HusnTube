@@ -21,6 +21,12 @@ jobs:
         run: |
           if [ -z "$GS" ]; then echo "::error::أضف Secret باسم GOOGLE_SERVICES_JSON (محتوى google-services.json)"; exit 1; fi
           printf '%s' "$GS" > android/app/google-services.json
+      - name: fix MainActivity access + firebase dependency
+        run: |
+          F=android/app/src/main/java/com/husntube/app/MainActivity.java
+          sed -i -E 's/protected void (onNewIntent|onStart|onStop|onResume)/public void \1/' "$F"
+          grep -q "firebase-messaging:23" android/app/build.gradle || printf "\ndependencies {\n    implementation 'com.google.firebase:firebase-messaging:23.4.1'\n}\n" >> android/app/build.gradle
+          grep -n "void on" "$F"
       - name: set applicationId from google-services.json
         run: |
           PKG=$(python3 -c "import json;print(json.load(open('android/app/google-services.json'))['client'][0]['client_info']['android_client_info']['package_name'])")
@@ -28,7 +34,10 @@ jobs:
           sed -i -E "s/applicationId \"[^\"]+\"/applicationId \"$PKG\"/" android/app/build.gradle
           grep -n applicationId android/app/build.gradle
       - run: npx cap sync android
-      - run: cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - name: build apk
+        run: |
+          cd android && chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --console=plain > ../build.log 2>&1 || { echo "=== COMPILE ERRORS ==="; grep -n -A4 "error:" ../build.log | head -80; echo "=== TAIL ==="; tail -25 ../build.log; exit 1; }
       - name: verify merged manifest
         run: |
           cd android && ./gradlew :app:processDebugMainManifest --no-daemon -q
