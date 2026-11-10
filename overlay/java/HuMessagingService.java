@@ -6,6 +6,8 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -51,6 +53,10 @@ public class HuMessagingService extends FirebaseMessagingService {
         else showMsg(c, nm, title, body == null ? "" : body, url, d.get("dm"));
     }
 
+    private static Bitmap logo(Context c) {
+        try { return BitmapFactory.decodeResource(c.getResources(), R.drawable.ic_large_husn); } catch (Throwable e) { return null; }
+    }
+
     private static PendingIntent open(Context c, int req, String url, boolean accept) {
         Intent i = new Intent(c, MainActivity.class)
                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -63,7 +69,7 @@ public class HuMessagingService extends FirebaseMessagingService {
         PendingIntent dec = PendingIntent.getBroadcast(c, 3, new Intent(c, CallActionReceiver.class).setAction("DECLINE"),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         NotificationCompat.Builder b = new NotificationCompat.Builder(c, CH_CALL)
-                .setSmallIcon(android.R.drawable.sym_call_incoming)
+                .setSmallIcon(R.drawable.ic_stat_husn).setColor(0xFF7C5CFF).setLargeIcon(logo(c))
                 .setContentTitle(title).setContentText(body)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -82,7 +88,7 @@ public class HuMessagingService extends FirebaseMessagingService {
     private void showMsg(Context c, NotificationManager nm, String title, String body, String url, String dm) {
         int id = dm == null ? 1 : (dm.hashCode() & 0x7fffff) + 10;
         NotificationCompat.Builder b = new NotificationCompat.Builder(c, CH_MSG)
-                .setSmallIcon(android.R.drawable.stat_notify_chat)
+                .setSmallIcon(R.drawable.ic_stat_husn).setColor(0xFF7C5CFF).setLargeIcon(logo(c))
                 .setContentTitle(title).setContentText(body)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)

@@ -38,7 +38,7 @@ if "HuMessagingService" not in m:
 
 g = open(B, encoding="utf-8").read()
 if "firebase-messaging" not in g:
-    g = re.sub(r"dependencies\s*\{", "dependencies {\n    implementation 'com.google.firebase:firebase-messaging:23.4.1'", g, count=1)
+    g += "\n\ndependencies {\n    implementation 'com.google.firebase:firebase-messaging:23.4.1'\n}\n"
     open(B, "w", encoding="utf-8").write(g)
 # أيقونة التطبيق (adaptive) بدل أيقونة Capacitor
 R = A + "/app/src/main/res"

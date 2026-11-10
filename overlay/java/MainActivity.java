@@ -35,22 +35,23 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(b);
         if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true); }
         handle(getIntent());
+        applyPending(); // يستبدل التحميل الأول مباشرة بدل تحميلين متتاليين
         askPermissions();
         fetchToken();
         askFullScreen();
     }
 
     @Override
-    protected void onNewIntent(Intent i) {
+    public void onNewIntent(Intent i) {
         super.onNewIntent(i);
         setIntent(i);
         handle(i);
         applyPending();
     }
 
-    @Override protected void onStart() { super.onStart(); HuApp.fg = true; hd.post(beat); fetchToken(); }
-    @Override protected void onStop() { super.onStop(); HuApp.fg = false; hd.removeCallbacks(beat); }
-    @Override protected void onResume() { super.onResume(); applyPending(); }
+    @Override public void onStart() { super.onStart(); HuApp.fg = true; hd.post(beat); fetchToken(); }
+    @Override public void onStop() { super.onStop(); HuApp.fg = false; hd.removeCallbacks(beat); }
+    @Override public void onResume() { super.onResume(); applyPending(); }
 
     private boolean has(String p) { return ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED; }
 
