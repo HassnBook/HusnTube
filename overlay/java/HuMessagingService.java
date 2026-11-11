@@ -40,6 +40,7 @@ public class HuMessagingService extends FirebaseMessagingService {
         String type = d.get("type");
         if (type == null) return;
         Context c = getApplicationContext();
+        KeepAliveService.start(c);
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
         if ("cancel".equals(type)) { nm.cancel(CALL_ID); return; }
