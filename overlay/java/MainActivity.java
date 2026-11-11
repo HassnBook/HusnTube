@@ -97,7 +97,9 @@ public class MainActivity extends BridgeActivity {
         if (i == null) return;
         String u = i.getStringExtra("open_url");
         if (u != null && u.startsWith(HuMessagingService.HOST)) {
+            if (i.getBooleanExtra("accept", false)) u = u + (u.contains("?") ? "&" : "?") + "acc=1";
             pending = u;
+            i.removeExtra("accept");
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) nm.cancel(HuMessagingService.CALL_ID);
             i.removeExtra("open_url");
