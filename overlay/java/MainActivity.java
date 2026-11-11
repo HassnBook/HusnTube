@@ -12,7 +12,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import android.webkit.JavascriptInterface;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -35,8 +34,6 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle b) {
         super.onCreate(b);
         if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true); }
-        try { getBridge().getWebView().addJavascriptInterface(new HuJs(), "HuNative"); } catch (Throwable e) { }
-        KeepAliveService.start(getApplicationContext());
         handle(getIntent());
         applyPending(); // يستبدل التحميل الأول مباشرة بدل تحميلين متتاليين
         askPermissions();
@@ -126,21 +123,5 @@ public class MainActivity extends BridgeActivity {
                 startActivity(new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:" + getPackageName())));
             }
         } catch (Exception e) { }
-    }
-
-    /** جسر بسيط للصفحة: window.HuNative */
-    public class HuJs {
-        @JavascriptInterface public boolean keep() { return KeepAliveService.on(getApplicationContext()); }
-        @JavascriptInterface public void setKeep(boolean v) { KeepAliveService.set(getApplicationContext(), v); }
-        @JavascriptInterface public void battery() {
-            runOnUiThread(() -> {
-                try {
-                    Intent it = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName()));
-                    startActivity(it);
-                } catch (Throwable e) {
-                    try { startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)); } catch (Throwable e2) { }
-                }
-            });
-        }
     }
 }

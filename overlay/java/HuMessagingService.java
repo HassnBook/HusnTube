@@ -40,7 +40,6 @@ public class HuMessagingService extends FirebaseMessagingService {
         String type = d.get("type");
         if (type == null) return;
         Context c = getApplicationContext();
-        KeepAliveService.start(c);
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
         if ("cancel".equals(type)) { nm.cancel(CALL_ID); return; }
@@ -50,6 +49,8 @@ public class HuMessagingService extends FirebaseMessagingService {
         if (url == null || !url.startsWith(HOST)) url = HOST;
         String title = d.get("title"), body = d.get("body");
         if (title == null || title.isEmpty()) title = "HusnTube";
+        String cid = d.get("cid");
+        if ("ring".equals(type) && cid != null && !cid.isEmpty() && cid.matches("[A-Za-z0-9_-]{1,40}")) url = url + (url.contains("?") ? "&" : "?") + "cid=" + cid;
         if ("ring".equals(type)) showCall(c, nm, title, body == null || body.isEmpty() ? "مكالمة واردة" : body, url);
         else showMsg(c, nm, title, body == null ? "" : body, url, d.get("dm"));
     }
