@@ -67,7 +67,11 @@ public class HuMessagingService extends FirebaseMessagingService {
     }
 
     private void showCall(Context c, NotificationManager nm, String title, String body, String url) {
-        PendingIntent full = open(c, 1, url, false), acc = open(c, 2, url, true);
+        PendingIntent full = open(c, 1, url, false);
+        Intent si = new Intent(c, CallService.class).setAction("START").putExtra("url", url);
+        PendingIntent acc = Build.VERSION.SDK_INT >= 26
+                ? PendingIntent.getForegroundService(c, 2, si, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE)
+                : PendingIntent.getService(c, 2, si, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         PendingIntent dec = PendingIntent.getBroadcast(c, 3, new Intent(c, CallActionReceiver.class).setAction("DECLINE"),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         NotificationCompat.Builder b = new NotificationCompat.Builder(c, CH_CALL)
@@ -81,14 +85,6 @@ public class HuMessagingService extends FirebaseMessagingService {
                 .setContentIntent(full)
                 .addAction(android.R.drawable.sym_action_call, "قبول", acc)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "رفض", dec);
-        // الشاشة مفتوحة ومفتوحة القفل: إشعار منبثق فقط (رنين الهاتف الأصلي) دون فتح التطبيق تلقائياً.
-        // الشاشة مطفأة/مقفلة: شاشة كاملة كما في تطبيقات الاتصال.
-        try {
-            android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
-            android.app.KeyguardManager km = (android.app.KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE);
-            boolean idle = (pm != null && !pm.isInteractive()) || (km != null && km.isKeyguardLocked());
-            if (idle) b.setFullScreenIntent(full, true);
-        } catch (Throwable e) { }
         Notification n = b.build();
         n.flags |= Notification.FLAG_INSISTENT; // يكرر الرنين حتى الرد/الإلغاء
         nm.notify(CALL_ID, n);

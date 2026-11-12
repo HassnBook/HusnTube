@@ -19,6 +19,8 @@ if "HuMessagingService" not in m:
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 """
@@ -31,6 +33,7 @@ if "HuMessagingService" not in m:
             </intent-filter>
         </service>
         <receiver android:name=".CallActionReceiver" android:exported="false" />
+        <service android:name=".CallService" android:exported="false" android:foregroundServiceType="microphone" />
 """
     m = m.replace("</application>", comps + "    </application>", 1)
     m = m.replace('android:name=".MainActivity"', 'android:name=".MainActivity"\n            android:showWhenLocked="true"\n            android:turnScreenOn="true"', 1)
@@ -48,6 +51,6 @@ for d in ("drawable-v24", "drawable"):
     if os.path.exists(f): os.remove(f)
 # تحقق صارم
 m2 = open(M, encoding="utf-8").read()
-for need in ("HuMessagingService", "RECORD_AUDIO", "POST_NOTIFICATIONS", "USE_FULL_SCREEN_INTENT"):
+for need in ("CallService", "FOREGROUND_SERVICE_MICROPHONE", "HuMessagingService", "RECORD_AUDIO", "POST_NOTIFICATIONS", "USE_FULL_SCREEN_INTENT"):
     if need not in m2: sys.exit("فشل التعديل: " + need + " غير موجود في AndroidManifest.xml")
 print("patched OK")
