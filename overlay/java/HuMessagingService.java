@@ -42,7 +42,7 @@ public class HuMessagingService extends FirebaseMessagingService {
         Context c = getApplicationContext();
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
-        if ("cancel".equals(type)) { nm.cancel(CALL_ID); return; }
+        if ("cancel".equals(type)) { nm.cancel(CALL_ID); CallActivity a = CallActivity.cur; if (a != null) a.finish(); return; }
         if (HuApp.fg) return; // التطبيق مفتوح: الويب يتولى العرض والرنين
         ensureChannels(c, nm);
         String url = d.get("url");
@@ -51,7 +51,7 @@ public class HuMessagingService extends FirebaseMessagingService {
         if (title == null || title.isEmpty()) title = "HusnTube";
         String cid = d.get("cid");
         if ("ring".equals(type) && cid != null && !cid.isEmpty() && cid.matches("[A-Za-z0-9_-]{1,40}")) url = url + (url.contains("?") ? "&" : "?") + "cid=" + cid;
-        if ("ring".equals(type)) showCall(c, nm, title, body == null || body.isEmpty() ? "مكالمة واردة" : body, url);
+        if ("ring".equals(type)) showCall(c, nm, title, body == null || body.isEmpty() ? "مكالمة واردة" : body, url, d.get("name"));
         else showMsg(c, nm, title, body == null ? "" : body, url, d.get("dm"));
     }
 
@@ -66,7 +66,7 @@ public class HuMessagingService extends FirebaseMessagingService {
         return PendingIntent.getActivity(c, req, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
-    private void showCall(Context c, NotificationManager nm, String title, String body, String url) {
+    private void showCall(Context c, NotificationManager nm, String title, String body, String url, String nm0) {
         PendingIntent full = open(c, 1, url, false);
         Intent si = new Intent(c, CallService.class).setAction("START").putExtra("url", url);
         PendingIntent acc = Build.VERSION.SDK_INT >= 26
@@ -85,6 +85,16 @@ public class HuMessagingService extends FirebaseMessagingService {
                 .setContentIntent(full)
                 .addAction(android.R.drawable.sym_action_call, "قبول", acc)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "رفض", dec);
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+            android.app.KeyguardManager km = (android.app.KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE);
+            boolean idle = (pm != null && !pm.isInteractive()) || (km != null && km.isKeyguardLocked());
+            if (idle) {
+                Intent ci = new Intent(c, CallActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION)
+                        .putExtra("url", url).putExtra("name", (nm0 != null && !nm0.isEmpty()) ? nm0 : title);
+                b.setFullScreenIntent(PendingIntent.getActivity(c, 5, ci, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE), true);
+            }
+        } catch (Throwable e) { }
         Notification n = b.build();
         n.flags |= Notification.FLAG_INSISTENT; // يكرر الرنين حتى الرد/الإلغاء
         nm.notify(CALL_ID, n);

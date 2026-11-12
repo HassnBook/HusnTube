@@ -33,6 +33,7 @@ if "HuMessagingService" not in m:
             </intent-filter>
         </service>
         <receiver android:name=".CallActionReceiver" android:exported="false" />
+        <activity android:name=".CallActivity" android:exported="false" android:launchMode="singleInstance" android:taskAffinity="" android:excludeFromRecents="true" android:showWhenLocked="true" android:turnScreenOn="true" android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
         <service android:name=".CallService" android:exported="false" android:foregroundServiceType="microphone" />
 """
     m = m.replace("</application>", comps + "    </application>", 1)
@@ -51,6 +52,6 @@ for d in ("drawable-v24", "drawable"):
     if os.path.exists(f): os.remove(f)
 # تحقق صارم
 m2 = open(M, encoding="utf-8").read()
-for need in ("CallService", "FOREGROUND_SERVICE_MICROPHONE", "HuMessagingService", "RECORD_AUDIO", "POST_NOTIFICATIONS", "USE_FULL_SCREEN_INTENT"):
+for need in ("CallActivity", "CallService", "FOREGROUND_SERVICE_MICROPHONE", "HuMessagingService", "RECORD_AUDIO", "POST_NOTIFICATIONS", "USE_FULL_SCREEN_INTENT"):
     if need not in m2: sys.exit("فشل التعديل: " + need + " غير موجود في AndroidManifest.xml")
 print("patched OK")
