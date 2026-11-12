@@ -78,10 +78,17 @@ public class HuMessagingService extends FirebaseMessagingService {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setOngoing(true).setAutoCancel(true)
                 .setTimeoutAfter(45000)
-                .setFullScreenIntent(full, true)
                 .setContentIntent(full)
                 .addAction(android.R.drawable.sym_action_call, "قبول", acc)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "رفض", dec);
+        // الشاشة مفتوحة ومفتوحة القفل: إشعار منبثق فقط (رنين الهاتف الأصلي) دون فتح التطبيق تلقائياً.
+        // الشاشة مطفأة/مقفلة: شاشة كاملة كما في تطبيقات الاتصال.
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+            android.app.KeyguardManager km = (android.app.KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE);
+            boolean idle = (pm != null && !pm.isInteractive()) || (km != null && km.isKeyguardLocked());
+            if (idle) b.setFullScreenIntent(full, true);
+        } catch (Throwable e) { }
         Notification n = b.build();
         n.flags |= Notification.FLAG_INSISTENT; // يكرر الرنين حتى الرد/الإلغاء
         nm.notify(CALL_ID, n);
