@@ -39,6 +39,7 @@ public class MainActivity extends BridgeActivity {
         askPermissions();
         fetchToken();
         askFullScreen();
+        askBattery();
     }
 
     @Override
@@ -111,6 +112,19 @@ public class MainActivity extends BridgeActivity {
             String u = pending; pending = null;
             getBridge().getWebView().loadUrl(u);
         }
+    }
+
+    /** استثناء من توفير البطارية (مرة واحدة): يمنع النظام من تجميد التطبيق فتصل الإشعارات والمكالمات. */
+    private void askBattery() {
+        try {
+            if (Build.VERSION.SDK_INT < 23) return;
+            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+            SharedPreferences p = getSharedPreferences("hu", MODE_PRIVATE);
+            if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName()) && !p.getBoolean("bat", false)) {
+                p.edit().putBoolean("bat", true).apply();
+                startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())));
+            }
+        } catch (Exception e) { }
     }
 
     /** أندرويد 14+: إذن الإشعار بملء الشاشة يُمنح من الإعدادات، نوجّه المستخدم مرة واحدة. */
