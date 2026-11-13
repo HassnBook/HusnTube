@@ -45,6 +45,13 @@ g = open(B, encoding="utf-8").read()
 if "firebase-messaging" not in g:
     g += "\n\ndependencies {\n    implementation 'com.google.firebase:firebase-messaging:23.4.1'\n}\n"
     open(B, "w", encoding="utf-8").write(g)
+
+# توقيع ثابت: كل بناء يُوقَّع بنفس المفتاح ليُثبَّت فوق النسخة القديمة
+shutil.copy("overlay/hu.keystore", A + "/app/hu.keystore")
+g = open(B, encoding="utf-8").read()
+if "hu.keystore" not in g:
+    sc = "\nandroid {\n    signingConfigs {\n        hu {\n            storeFile file('hu.keystore')\n            storePassword 'husntube'\n            keyAlias 'husn'\n            keyPassword 'husntube'\n        }\n    }\n    buildTypes {\n        debug { signingConfig signingConfigs.hu }\n        release { signingConfig signingConfigs.hu }\n    }\n}\n"
+    open(B, "w", encoding="utf-8").write(g + sc)
 # أيقونة التطبيق (adaptive) بدل أيقونة Capacitor
 R = A + "/app/src/main/res"
 shutil.copytree("overlay/res", R, dirs_exist_ok=True)

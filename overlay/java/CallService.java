@@ -64,8 +64,8 @@ public class CallService extends Service {
         if (url == null || !url.startsWith(HuMessagingService.HOST)) { stopSelf(); return START_NOT_STICKY; }
         running = true;
         liveAt = 0;
-        String nm = i.getStringExtra("name");
-        name = nm == null ? "" : nm;
+        String nmx = i.getStringExtra("name");
+        name = nmx == null ? "" : nmx;
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26 && nm != null && nm.getNotificationChannel(CH) == null)
             nm.createNotificationChannel(new NotificationChannel(CH, "مكالمة جارية", NotificationManager.IMPORTANCE_LOW));
