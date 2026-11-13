@@ -30,6 +30,7 @@ public class CallService extends Service {
     static volatile boolean running = false;
     static volatile String name = "";
     static volatile long liveAt = 0;
+    static volatile String photo = "";
     private WebView wv;
     private final Handler hd = new Handler(Looper.getMainLooper());
     private AudioManager am;
@@ -64,6 +65,7 @@ public class CallService extends Service {
         if (url == null || !url.startsWith(HuMessagingService.HOST)) { stopSelf(); return START_NOT_STICKY; }
         running = true;
         liveAt = 0;
+        photo = "";
         String nmx = i.getStringExtra("name");
         name = nmx == null ? "" : nmx;
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -84,6 +86,7 @@ public class CallService extends Service {
             s.setMediaPlaybackRequiresUserGesture(false);
             wv.addJavascriptInterface(new Object() {
                 @JavascriptInterface public void live() { hd.post(() -> { live = true; liveAt = android.os.SystemClock.elapsedRealtime(); refresh("مكالمة جارية"); }); }
+                @JavascriptInterface public void photo(String p) { photo = p == null ? "" : p; hd.post(() -> { CallActivity a = CallActivity.cur; if (a != null) a.loadPhoto(); }); }
                 @JavascriptInterface public void ended() { hd.post(() -> stopSelfSafe()); }
             }, "HuNative");
             wv.setWebViewClient(new WebViewClient());

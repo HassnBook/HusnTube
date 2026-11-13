@@ -2,7 +2,13 @@ package com.husntube.app;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.util.Base64;
+import android.widget.ImageView;
+import android.view.ViewOutlineProvider;
+import android.graphics.Outline;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -22,6 +28,7 @@ public class CallActivity extends Activity {
     private final Handler hd = new Handler(Looper.getMainLooper());
     private String name, url;
     private TextView status;
+    private ImageView avatar;
     private long t0;
     private boolean muted = false, spk = false;
 
@@ -88,23 +95,39 @@ public class CallActivity extends Activity {
     private void showLive() {
         hd.removeCallbacksAndMessages(null);
         LinearLayout root = base();
+        root.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        root.setPadding(60, 220, 60, 100);
         root.addView(tv("HusnTube • مكالمة صوتية", 14, "#b9a8ff", false));
+        avatar = new ImageView(this);
+        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        avatar.setBackground(circ("#6d4aff"));
+        avatar.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View v, Outline o) { o.setOval(0, 0, v.getWidth(), v.getHeight()); }
+        });
+        avatar.setClipToOutline(true);
+        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(340, 340);
+        ap.setMargins(0, 60, 0, 40);
+        avatar.setLayoutParams(ap);
+        root.addView(avatar);
+        loadPhoto();
         root.addView(tv(name, 32, "#ffffff", true));
         status = tv("جاري الاتصال...", 22, "#4ade80", true);
         root.addView(status);
+        View sp = new View(this);
+        sp.setLayoutParams(new LinearLayout.LayoutParams(1, 0, 1f));
+        root.addView(sp);
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER);
-        row.setPadding(0, 200, 0, 0);
-        final TextView mb = btn("كتم", "#475569", null), sb = btn("سماعة", "#475569", null);
+        final TextView mb = cbtn("🎤", "#475569", null), sb = cbtn("🔊", "#475569", null);
         mb.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { muted = !muted; svc("MUTE"); mb.setText(muted ? "إلغاء الكتم" : "كتم"); }
+            @Override public void onClick(View v) { muted = !muted; svc("MUTE"); mb.setText(muted ? "🔇" : "🎤"); mb.setBackground(circ(muted ? "#f59e0b" : "#475569")); }
         });
         sb.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { spk = !spk; svc("SPK"); sb.setText(spk ? "سماعة ✓" : "سماعة"); }
+            @Override public void onClick(View v) { spk = !spk; svc("SPK"); sb.setBackground(circ(spk ? "#22c55e" : "#475569")); }
         });
         row.addView(mb);
-        row.addView(btn("إنهاء", "#e5253b", new View.OnClickListener() {
+        row.addView(cbtn("📞", "#e5253b", new View.OnClickListener() {
             @Override public void onClick(View v) { svc("END"); }
         }));
         row.addView(sb);
@@ -121,6 +144,46 @@ public class CallActivity extends Activity {
                 hd.postDelayed(this, 500);
             }
         });
+    }
+
+    private GradientDrawable circ(String col) {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL); g.setColor(Color.parseColor(col));
+        return g;
+    }
+
+    private TextView cbtn(String s, String col, View.OnClickListener l) {
+        TextView t = tv(s, 28, "#ffffff", true);
+        t.setBackground(circ(col));
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(0, 0, 0, 0);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(190, 190);
+        p.setMargins(24, 0, 24, 0);
+        t.setLayoutParams(p);
+        if (l != null) t.setOnClickListener(l);
+        return t;
+    }
+
+    /** يحمّل صورة المتصل (data: أو http) من CallService.photo ويعرضها داخل الدائرة. */
+    void loadPhoto() {
+        final String p = CallService.photo;
+        if (avatar == null || p == null || p.isEmpty()) return;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                Bitmap bm = null;
+                try {
+                    if (p.startsWith("data:")) {
+                        byte[] d = Base64.decode(p.substring(p.indexOf(',') + 1), Base64.DEFAULT);
+                        bm = BitmapFactory.decodeByteArray(d, 0, d.length);
+                    } else if (p.startsWith("http")) {
+                        java.io.InputStream in = new java.net.URL(p).openStream();
+                        bm = BitmapFactory.decodeStream(in); in.close();
+                    }
+                } catch (Throwable e) { }
+                final Bitmap b = bm;
+                if (b != null) hd.post(new Runnable() { @Override public void run() { if (avatar != null) avatar.setImageBitmap(b); } });
+            }
+        }).start();
     }
 
     private TextView tv(String s, int sp, String col, boolean bold) {
