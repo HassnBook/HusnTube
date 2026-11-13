@@ -28,6 +28,8 @@ public class CallService extends Service {
     static final String CH = "call_active_v1";
     static final int NID = 4243;
     static volatile boolean running = false;
+    static volatile String name = "";
+    static volatile long liveAt = 0;
     private WebView wv;
     private final Handler hd = new Handler(Looper.getMainLooper());
     private AudioManager am;
@@ -39,11 +41,12 @@ public class CallService extends Service {
     private Notification note(String text) {
         Intent endI = new Intent(this, CallService.class).setAction("END");
         PendingIntent end = PendingIntent.getService(this, 9, endI, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        Intent op = new Intent(this, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        Intent op = new Intent(this, CallActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra("live", true).putExtra("name", name);
         PendingIntent open = PendingIntent.getActivity(this, 10, op, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new NotificationCompat.Builder(this, CH)
                 .setSmallIcon(R.drawable.ic_stat_husn).setColor(0xFF7C5CFF)
-                .setContentTitle("HusnTube").setContentText(text)
+                .setContentTitle(name == null || name.isEmpty() ? "HusnTube" : name).setContentText(text)
                 .setCategory(NotificationCompat.CATEGORY_CALL).setOngoing(true).setOnlyAlertOnce(true)
                 .setUsesChronometer(live).setContentIntent(open)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "إنهاء", end).build();
@@ -54,10 +57,15 @@ public class CallService extends Service {
     public int onStartCommand(Intent i, int flags, int startId) {
         String act = i == null ? null : i.getAction();
         if ("END".equals(act)) { endCall(); return START_NOT_STICKY; }
+        if ("MUTE".equals(act)) { try { if (wv != null) wv.evaluateJavascript("window.__huMute&&window.__huMute()", null); } catch (Throwable e) { } return START_NOT_STICKY; }
+        if ("SPK".equals(act)) { try { if (am != null) am.setSpeakerphoneOn(!am.isSpeakerphoneOn()); } catch (Throwable e) { } return START_NOT_STICKY; }
         if (running) return START_NOT_STICKY;
         String url = i == null ? null : i.getStringExtra("url");
         if (url == null || !url.startsWith(HuMessagingService.HOST)) { stopSelf(); return START_NOT_STICKY; }
         running = true;
+        liveAt = 0;
+        String nm = i.getStringExtra("name");
+        name = nm == null ? "" : nm;
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26 && nm != null && nm.getNotificationChannel(CH) == null)
             nm.createNotificationChannel(new NotificationChannel(CH, "مكالمة جارية", NotificationManager.IMPORTANCE_LOW));
@@ -75,7 +83,7 @@ public class CallService extends Service {
             s.setDomStorageEnabled(true);
             s.setMediaPlaybackRequiresUserGesture(false);
             wv.addJavascriptInterface(new Object() {
-                @JavascriptInterface public void live() { hd.post(() -> { live = true; refresh("مكالمة جارية"); }); }
+                @JavascriptInterface public void live() { hd.post(() -> { live = true; liveAt = android.os.SystemClock.elapsedRealtime(); refresh("مكالمة جارية"); }); }
                 @JavascriptInterface public void ended() { hd.post(() -> stopSelfSafe()); }
             }, "HuNative");
             wv.setWebViewClient(new WebViewClient());
@@ -108,6 +116,8 @@ public class CallService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        liveAt = 0;
+        try { CallActivity a = CallActivity.cur; if (a != null) a.finish(); } catch (Throwable e) { }
         hd.removeCallbacksAndMessages(null);
         try { if (am != null) am.setMode(oldMode); } catch (Throwable e) { }
         try { if (wv != null) { wv.loadUrl("about:blank"); wv.destroy(); wv = null; } } catch (Throwable e) { }

@@ -50,7 +50,8 @@ public class MainActivity extends BridgeActivity {
         applyPending();
     }
 
-    @Override public void onStart() { super.onStart(); HuApp.fg = true; hd.post(beat); fetchToken(); }
+    @Override public void onStart() { super.onStart(); HuApp.fg = true; hd.post(beat); fetchToken();
+        try { if (CallService.running && CallActivity.cur == null) startActivity(new Intent(this, CallActivity.class).putExtra("live", true)); } catch (Throwable e) { } }
     @Override public void onStop() { super.onStop(); HuApp.fg = false; hd.removeCallbacks(beat); }
     @Override public void onResume() { super.onResume(); applyPending(); }
 

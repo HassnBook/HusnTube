@@ -42,7 +42,7 @@ public class HuMessagingService extends FirebaseMessagingService {
         Context c = getApplicationContext();
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
-        if ("cancel".equals(type)) { nm.cancel(CALL_ID); CallActivity a = CallActivity.cur; if (a != null) a.finish(); return; }
+        if ("cancel".equals(type)) { nm.cancel(CALL_ID); CallActivity a = CallActivity.cur; if (a != null && !CallService.running) a.finish(); return; }
         if (HuApp.fg) return; // التطبيق مفتوح: الويب يتولى العرض والرنين
         ensureChannels(c, nm);
         String url = d.get("url");
@@ -68,10 +68,9 @@ public class HuMessagingService extends FirebaseMessagingService {
 
     private void showCall(Context c, NotificationManager nm, String title, String body, String url, String nm0) {
         PendingIntent full = open(c, 1, url, false);
-        Intent si = new Intent(c, CallService.class).setAction("START").putExtra("url", url);
-        PendingIntent acc = Build.VERSION.SDK_INT >= 26
-                ? PendingIntent.getForegroundService(c, 2, si, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE)
-                : PendingIntent.getService(c, 2, si, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Intent ai = new Intent(c, CallActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .putExtra("url", url).putExtra("accept", true).putExtra("name", (nm0 != null && !nm0.isEmpty()) ? nm0 : title);
+        PendingIntent acc = PendingIntent.getActivity(c, 2, ai, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         PendingIntent dec = PendingIntent.getBroadcast(c, 3, new Intent(c, CallActionReceiver.class).setAction("DECLINE"),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         NotificationCompat.Builder b = new NotificationCompat.Builder(c, CH_CALL)
