@@ -34,6 +34,18 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle b) {
         super.onCreate(b);
         if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true); }
+        try {
+            getBridge().getWebView().addJavascriptInterface(new Object() {
+                @android.webkit.JavascriptInterface
+                public void open(String u) {
+                    try {
+                        if (u == null || !(u.startsWith("https://husntubee1.web.app/") || u.startsWith("https://husntubee1.firebaseapp.com/"))) return;
+                        final Intent it = new Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        runOnUiThread(() -> { try { startActivity(it); } catch (Throwable e) { } });
+                    } catch (Throwable e) { }
+                }
+            }, "HuExt");
+        } catch (Throwable e) { }
         handle(getIntent());
         applyPending(); // يستبدل التحميل الأول مباشرة بدل تحميلين متتاليين
         askPermissions();
