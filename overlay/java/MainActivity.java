@@ -89,8 +89,10 @@ public class MainActivity extends BridgeActivity {
         try {
             if (getBridge() == null || getBridge().getWebView() == null) return;
             boolean notif = Build.VERSION.SDK_INT < 33 || has(Manifest.permission.POST_NOTIFICATIONS);
+            long inst = 0; String vn = "";
+            try { android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0); inst = pi.lastUpdateTime; vn = pi.versionName == null ? "" : pi.versionName.replace("'", ""); } catch (Throwable e) { }
             String js = "window.__hu={v:'dm',tok:'" + (tok == null ? "" : tok.replace("'", "")) + "',mic:" + has(Manifest.permission.RECORD_AUDIO)
-                    + ",cam:" + has(Manifest.permission.CAMERA) + ",notif:" + notif + ",fsi:" + fsiOk() + "};";
+                    + ",cam:" + has(Manifest.permission.CAMERA) + ",notif:" + notif + ",fsi:" + fsiOk() + ",inst:" + inst + ",vn:'" + vn + "'};";
             getBridge().getWebView().evaluateJavascript(js, null);
         } catch (Throwable e) { }
     }
