@@ -35,6 +35,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(b);
         if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true); }
         try {
+            getBridge().getWebView().getSettings().setMediaPlaybackRequiresUserGesture(false);
             getBridge().getWebView().addJavascriptInterface(new Object() {
                 @android.webkit.JavascriptInterface
                 public void open(String u) {
