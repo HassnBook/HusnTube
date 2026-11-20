@@ -46,6 +46,42 @@ public class MainActivity extends BridgeActivity {
                     } catch (Throwable e) { }
                 }
             }, "HuExt");
+            getBridge().getWebView().addJavascriptInterface(new Object() {
+                @android.webkit.JavascriptInterface
+                public void speaker(boolean on) {
+                    runOnUiThread(() -> {
+                        try {
+                            android.media.AudioManager am = (android.media.AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                            if (am == null) return;
+                            am.setMode(android.media.AudioManager.MODE_IN_COMMUNICATION);
+                            if (Build.VERSION.SDK_INT >= 31) {
+                                boolean ext = false;
+                                for (android.media.AudioDeviceInfo d : am.getAvailableCommunicationDevices()) {
+                                    int t = d.getType();
+                                    if (t == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO || t == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET || t == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES || t == android.media.AudioDeviceInfo.TYPE_USB_HEADSET || t == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET) { am.setCommunicationDevice(d); ext = true; break; }
+                                }
+                                if (!ext) {
+                                    int want = on ? android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER : android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE;
+                                    for (android.media.AudioDeviceInfo d : am.getAvailableCommunicationDevices()) { if (d.getType() == want) { am.setCommunicationDevice(d); break; } }
+                                }
+                            } else {
+                                am.setSpeakerphoneOn(on);
+                            }
+                        } catch (Throwable e) { }
+                    });
+                }
+                @android.webkit.JavascriptInterface
+                public void reset() {
+                    runOnUiThread(() -> {
+                        try {
+                            android.media.AudioManager am = (android.media.AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                            if (am == null) return;
+                            if (Build.VERSION.SDK_INT >= 31) am.clearCommunicationDevice(); else am.setSpeakerphoneOn(false);
+                            if (!CallService.running) am.setMode(android.media.AudioManager.MODE_NORMAL);
+                        } catch (Throwable e) { }
+                    });
+                }
+            }, "HuAudio");
         } catch (Throwable e) { }
         handle(getIntent());
         applyPending(); // يستبدل التحميل الأول مباشرة بدل تحميلين متتاليين
