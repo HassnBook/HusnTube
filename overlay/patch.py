@@ -43,8 +43,12 @@ if "HuMessagingService" not in m:
 
 g = open(B, encoding="utf-8").read()
 if "firebase-messaging" not in g:
-    g += "\n\ndependencies {\n    implementation 'com.google.firebase:firebase-messaging:23.4.1'\n}\n"
+    g += "\n\ndependencies {\n    implementation 'com.google.firebase:firebase-messaging:23.4.1'\n    implementation 'com.google.android.gms:play-services-auth:21.0.0'\n}\n"
     open(B, "w", encoding="utf-8").write(g)
+
+g = open(B, encoding="utf-8").read()
+if "play-services-auth" not in g:
+    open(B, "w", encoding="utf-8").write(g + "\ndependencies {\n    implementation 'com.google.android.gms:play-services-auth:21.0.0'\n}\n")
 
 # توقيع ثابت: كل بناء يُوقَّع بنفس المفتاح ليُثبَّت فوق النسخة القديمة
 shutil.copy("overlay/hu.keystore", A + "/app/hu.keystore")

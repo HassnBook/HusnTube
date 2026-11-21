@@ -13,7 +13,20 @@
           "package_name": "husntube.app.com"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "130661171711-s43r6qv7njgjm2caac82qegp12qamfm3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "husntube.app.com",
+            "certificate_hash": "302da889eaddcaf633485e18b5a469e4470eeb1f"
+          }
+        },
+        {
+          "client_id": "130661171711-2kb3iv8f4g070381e6bot8kqkfjn2svd.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDDXIE8b3Hp2UwCJ49smxpdHGD3NgwQcsM"
@@ -21,7 +34,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "130661171711-2kb3iv8f4g070381e6bot8kqkfjn2svd.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

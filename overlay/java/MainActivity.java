@@ -82,6 +82,18 @@ public class MainActivity extends BridgeActivity {
                     });
                 }
             }, "HuAudio");
+            getBridge().getWebView().addJavascriptInterface(new Object() {
+                @android.webkit.JavascriptInterface
+                public void signIn() {
+                    runOnUiThread(() -> { try {
+                        int rid = getResources().getIdentifier("default_web_client_id", "string", getPackageName());
+                        if (rid == 0) { gjs("", "noclient"); return; }
+                        com.google.android.gms.auth.api.signin.GoogleSignInOptions o = new com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN).requestIdToken(getString(rid)).requestEmail().build();
+                        com.google.android.gms.auth.api.signin.GoogleSignInClient c = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(MainActivity.this, o);
+                        c.signOut().addOnCompleteListener(t -> startActivityForResult(c.getSignInIntent(), 9301));
+                    } catch (Throwable e) { gjs("", "err"); } });
+                }
+            }, "HuGoogle");
         } catch (Throwable e) { }
         handle(getIntent());
         applyPending(); // يستبدل التحميل الأول مباشرة بدل تحميلين متتاليين
@@ -89,6 +101,24 @@ public class MainActivity extends BridgeActivity {
         fetchToken();
         askFullScreen();
         askBattery();
+    }
+
+    private void gjs(final String tok, final String err) {
+        runOnUiThread(() -> { try {
+            getBridge().getWebView().evaluateJavascript("window.__huGoogle&&window.__huGoogle(" + org.json.JSONObject.quote(tok == null ? "" : tok) + "," + org.json.JSONObject.quote(err == null ? "" : err) + ")", null);
+        } catch (Throwable e) { } });
+    }
+
+    @Override
+    protected void onActivityResult(int rq, int rs, Intent d) {
+        super.onActivityResult(rq, rs, d);
+        if (rq != 9301) return;
+        try {
+            com.google.android.gms.auth.api.signin.GoogleSignInAccount a = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(d).getResult(com.google.android.gms.common.api.ApiException.class);
+            gjs(a.getIdToken(), a.getIdToken() == null ? "noid" : "");
+        } catch (com.google.android.gms.common.api.ApiException e) {
+            gjs("", "code" + e.getStatusCode());
+        } catch (Throwable e) { gjs("", "err"); }
     }
 
     @Override
